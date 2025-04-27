@@ -51,15 +51,11 @@ func Create(name string, data []byte) {
 	}
 
 	sectors := divRoundUp(db.size, sectorSize)
-	db.data = make([]*[sectorSize]byte, sectors)
-	for i := range db.data {
-		sector := data[i*sectorSize:]
-		if len(sector) >= sectorSize {
-			db.data[i] = (*[sectorSize]byte)(sector)
-		} else {
-			db.data[i] = new([sectorSize]byte)
-			copy((*db.data[i])[:], sector)
-		}
+	db.data = make(map[int64][]byte, sectors)
+	for i := int64(0); i < sectors; i++ {
+		sector := make([]byte, sectorSize)
+		copy(sector, data[i*sectorSize:])
+		db.data[i] = sector
 	}
 
 	memoryDBs[name] = db

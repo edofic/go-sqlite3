@@ -1,13 +1,13 @@
-// Package memdb implements the "memdb" SQLite VFS.
+// Package ordmap implements the "memdb" SQLite VFS.
 //
-// The "memdb" [vfs.VFS] allows the same in-memory database to be shared
+// The "ordmap" [vfs.VFS] allows the same in-memory database to be shared
 // among multiple database connections in the same process,
 // as long as the database name begins with "/".
 //
-// Importing package memdb registers the VFS:
+// Importing package ordmap registers the VFS:
 //
-//	import _ "github.com/ncruces/go-sqlite3/vfs/memdb"
-package memdb
+//	import _ "github.com/ncruces/go-sqlite3/vfs/ordmap"
+package ordmap
 
 import (
 	"fmt"
@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	vfs.Register("memdb", memVFS{})
+	vfs.Register("ordmap", memVFS{})
 }
 
 var (
@@ -60,6 +60,12 @@ func Create(name string, data []byte) {
 	}
 
 	memoryDBs[name] = db
+}
+
+func Fork(name, newName string) {
+	memoryMtx.Lock()
+	defer memoryMtx.Unlock()
+	memoryDBs[newName] = memoryDBs[name].fork()
 }
 
 // Delete deletes a shared memory database.

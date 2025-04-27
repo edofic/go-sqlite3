@@ -1,4 +1,4 @@
-package memdb
+package ordmap
 
 import (
 	"io"
@@ -108,6 +108,17 @@ func (m *memDB) release() {
 	defer memoryMtx.Unlock()
 	if m.refs--; m.refs == 0 && m == memoryDBs[m.name] {
 		delete(memoryDBs, m.name)
+	}
+}
+
+func (m *memDB) fork() *memDB {
+	m.dataMtx.Lock()
+	defer m.dataMtx.Unlock()
+	return &memDB{
+		refs: 1,
+		name: m.name,
+		data: m.data,
+		size: m.size,
 	}
 }
 

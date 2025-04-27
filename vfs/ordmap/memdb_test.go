@@ -1,4 +1,4 @@
-package memdb
+package ordmap
 
 import (
 	_ "embed"
@@ -17,7 +17,7 @@ func Test_wal(t *testing.T) {
 
 	Create("test.db", walDB)
 
-	db, err := sqlite3.Open("file:/test.db?vfs=memdb")
+	db, err := sqlite3.Open("file:/test.db?vfs=ordmap")
 	if err != nil {
 		t.Fatal(err)
 	}

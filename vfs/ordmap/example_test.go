@@ -3,18 +3,19 @@ package memdb_test
 import (
 	"database/sql"
 	_ "embed"
-	"fmt"
 	"log"
+	"testing"
 
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
-	"github.com/ncruces/go-sqlite3/vfs/memdb"
+	memdb "github.com/ncruces/go-sqlite3/vfs/ordmap"
+	"github.com/stretchr/testify/require"
 )
 
 //go:embed testdata/test.db
 var testDB []byte
 
-func Example() {
+func TestExample(t *testing.T) {
 	memdb.Create("test.db", testDB)
 
 	db, err := sql.Open("sqlite3", "file:/test.db?vfs=memdb")
@@ -34,17 +35,23 @@ func Example() {
 	}
 	defer rows.Close()
 
+	actual := [][]string{}
 	for rows.Next() {
 		var id, name string
 		err = rows.Scan(&id, &name)
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("%s %s\n", id, name)
+		actual = append(actual, []string{id, name})
 	}
-	// Output:
-	// 0 go
-	// 1 zig
-	// 2 whatever
-	// 3 rust
+
+	expected := [][]string{
+		{"0", "go"},
+		{"1", "zig"},
+		{"2", "whatever"},
+		{"3", "rust"},
+	}
+
+	require.Equal(t, expected, actual)
+
 }

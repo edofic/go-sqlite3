@@ -2,6 +2,10 @@ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/dchest/siphash v1.2.3 h1:QXwFc8cFOR2dSa/gE6o/HokBMWtLUaNDVd+22aKHeEA=
 github.com/dchest/siphash v1.2.3/go.mod h1:0NvQU092bT0ipiFN++/rXm69QG9tVxLAlQHIXMPAkHc=
+github.com/edofic/go-ordmap/v2 v2.0.0-beta2 h1:hYAojwbyTvAnwSB11F3kQ2ynaa9zZdXniD0Wgf6oL/g=
+github.com/edofic/go-ordmap/v2 v2.0.0-beta2/go.mod h1:PPZBnO7mlqO4d5xVjvEZUt0yg3TwZ2DVL412UaZT2x0=
+github.com/edofic/go-ordmap/v2 v2.0.0 h1:pWiYELTJdFAQ00TQSfA4PoyYsAfKxHNUff9x88lWZlY=
+github.com/edofic/go-ordmap/v2 v2.0.0/go.mod h1:BF4fX5pcyMRO/VidWMgFfDleHEdg+wPpCfQbORyOSCY=
 github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
 github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/ncruces/julianday v1.0.0 h1:fH0OKwa7NWvniGQtxdJRxAgkBMolni2BjDHaWTxqt7M=

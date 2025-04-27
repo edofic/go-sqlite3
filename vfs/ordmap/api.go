@@ -15,6 +15,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/edofic/go-ordmap/v2"
 	"github.com/ncruces/go-sqlite3/vfs"
 )
 
@@ -39,6 +40,7 @@ func Create(name string, data []byte) {
 	db := &memDB{
 		refs: 1,
 		name: name,
+		data: ordmap.NewBuiltin[int64, []byte](),
 		size: int64(len(data)),
 	}
 
@@ -51,11 +53,10 @@ func Create(name string, data []byte) {
 	}
 
 	sectors := divRoundUp(db.size, sectorSize)
-	db.data = make(map[int64][]byte, sectors)
 	for i := int64(0); i < sectors; i++ {
 		sector := make([]byte, sectorSize)
 		copy(sector, data[i*sectorSize:])
-		db.data[i] = sector
+		db.data = db.data.Insert(i, sector)
 	}
 
 	memoryDBs[name] = db

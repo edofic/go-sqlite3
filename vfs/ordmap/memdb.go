@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/edofic/go-ordmap/v2"
 	"github.com/ncruces/go-sqlite3"
 	"github.com/ncruces/go-sqlite3/vfs"
 )
@@ -53,7 +54,7 @@ func (memVFS) Open(name string, flags vfs.OpenFlag) (vfs.File, vfs.OpenFlag, err
 		// Create a new database backend
 		db = &memDB{
 			name: name,
-			data: make(map[int64][]byte), // Initialize the map
+			data: ordmap.NewBuiltin[int64, []byte](),
 		}
 	}
 	if shared {
@@ -85,7 +86,7 @@ type memDB struct {
 	// Stores database content keyed by sector index.
 	// Slices are typically sectorSize bytes long, except potentially the last one.
 	// +checklocks:dataMtx
-	data map[int64][]byte
+	data ordmap.NodeBuiltin[int64, []byte]
 
 	// Logical size of the file.
 	// +checklocks:dataMtx
@@ -163,7 +164,7 @@ func (m *memFile) ReadAt(b []byte, off int64) (n int, err error) {
 	bytesInSector := sectorSize - rest
 	readNow := min(bytesToRead, bytesInSector) // Actual bytes to process in this call
 
-	page, ok := m.data[base]
+	page, ok := m.data.Get(base)
 	if !ok {
 		// Sparse read - return zeroes
 		clear(b[:readNow])
@@ -225,36 +226,15 @@ func (m *memFile) writeToSector(base int64, offsetInSector int64, dataToWrite []
 		// Caller should have prevented this based on non-crossing assumption
 		return 0, io.ErrShortWrite // Attempt to write past sector boundary
 	}
-	neededLen := int(neededEndOffset)
 
-	page, ok := m.data[base]
+	page, ok := m.data.Get(base)
 	if !ok {
-		// Sector doesn't exist, create it (full size)
 		page = make([]byte, sectorSize)
-		m.data[base] = page
-	} else if len(page) < neededLen {
-		// Sector exists but is too short (e.g., last page after truncate).
-		// Extend it, preferably to full sectorSize for consistency.
-		if cap(page) >= sectorSize {
-			// Extend by reslicing up to sectorSize
-			oldLen := len(page)
-			page = page[:sectorSize]
-			clear(page[oldLen:]) // Zero out the newly extended part before writing
-			m.data[base] = page  // Update map entry
-		} else {
-			// Not enough capacity, need to reallocate a full sector
-			newPage := make([]byte, sectorSize)
-			copy(newPage, page) // Copy existing data
-			page = newPage
-			m.data[base] = page // Update map entry
-		}
-		// Re-check if still too short (shouldn't be if we sized to sectorSize)
-		if len(page) < neededLen {
-			// Should not happen - indicates a logic error
-			return 0, sqlite3.IOERR_WRITE // Internal error resizing slice
-		}
+	} else {
+		newPage := make([]byte, sectorSize)
+		copy(newPage, page) // Copy existing data
+		page = newPage
 	}
-	// else: page exists and is long enough
 
 	// Perform the copy
 	n := copy(page[offsetInSector:], dataToWrite)
@@ -264,6 +244,7 @@ func (m *memFile) writeToSector(base int64, offsetInSector int64, dataToWrite []
 		return n, io.ErrShortWrite // Or sqlite3.IOERR_WRITE
 	}
 
+	m.data = m.data.Insert(base, page)
 	return n, nil
 }
 
@@ -335,10 +316,7 @@ func (m *memFile) truncate(size int64) error {
 	m.size = size // Update logical size
 
 	if size == 0 {
-		// Clear the map completely
-		// Use clear() available from Go 1.21+
-		// For older Go versions: m.data = make(map[int64][]byte)
-		clear(m.data)
+		m.data = ordmap.NewBuiltin[int64, []byte]()
 		return nil
 	}
 
@@ -346,30 +324,19 @@ func (m *memFile) truncate(size int64) error {
 	lastBase := (size - 1) / sectorSize
 	sizeInLastSector := size - (lastBase * sectorSize) // Bytes used in the last sector
 
-	// Iterate through existing sectors in the map
-	for base, page := range m.data {
-		if base > lastBase {
-			// This sector is entirely beyond the new file size, remove it
-			delete(m.data, base)
-		} else if base == lastBase {
-			// This is the last sector. Adjust its slice length if necessary.
-			if int64(len(page)) > sizeInLastSector {
-				// Shrink the slice. Data beyond new length becomes inaccessible.
-				// Optionally clear the truncated part of the capacity for GC/security,
-				// but simply reslicing is sufficient for correctness.
-				// clear(page[sizeInLastSector:cap(page)])
-				m.data[base] = page[:sizeInLastSector]
-			}
-			// If len(page) <= sizeInLastSector, it's already short enough or
-			// needs potential expansion later by WriteAt. No action needed here.
-		}
-		// Sectors before lastBase (base < lastBase) are untouched by truncate.
+	lastSector, ok := m.data.Get(lastBase)
+	if ok {
+		truncated := make([]byte, sectorSize)
+		copy(truncated, lastSector)
+		m.data = m.data.Insert(lastBase, truncated[:sizeInLastSector])
 	}
 
-	// Note: Unlike the original array-based version, we don't explicitly
-	// add empty sectors when truncating to a *larger* size. The map handles
-	// sparseness naturally. ReadAt will return zeroes for unallocated areas
-	// within m.size, and WriteAt will create/extend sectors as needed.
+	for iter := m.data.Iterate(); !iter.Done(); iter.Next() {
+		key := iter.GetKey()
+		if key > lastBase {
+			m.data = m.data.Remove(key)
+		}
+	}
 
 	return nil
 }
@@ -492,20 +459,6 @@ func (m *memFile) CheckReservedLock() (bool, error) {
 	defer m.lockMtx.Unlock()
 	// Return true if any connection holds a RESERVED or higher lock.
 	return m.reserved || m.lock >= vfs.LOCK_EXCLUSIVE, nil
-	// Revisit: The original returned m.reserved. Let's stick to that for simplicity.
-	// The check is usually "is there *another* connection holding reserved?".
-	// But OPEN_MEMORY might simplify this. Let's trust the original simple check.
-	// return m.reserved, nil // Sticking to the original simpler check.
-
-	// Further thought: What does SQLite *use* this for?
-	// It checks if *another* process/connection holds a reserved lock before proceeding.
-	// Since all access goes through this VFS state for shared DBs, checking `m.reserved`
-	// directly indicates if *any* connection attached to this memDB holds it.
-	// If *we* hold RESERVED or EXCLUSIVE, `m.lock` check handles it.
-	// If *another* connection holds RESERVED, `m.reserved` will be true.
-	// So the combined check seems slightly more robust, but let's check the original's source if available.
-	// Stick to the simple check for now, assuming it was sufficient.
-	// return m.reserved, nil
 }
 
 func (m *memFile) SectorSize() int {

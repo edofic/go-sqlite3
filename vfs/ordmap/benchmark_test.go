@@ -8,7 +8,7 @@ import (
 	_ "github.com/ncruces/go-sqlite3/driver"
 	_ "github.com/ncruces/go-sqlite3/embed"
 	_ "github.com/ncruces/go-sqlite3/vfs/memdb"
-	_ "github.com/ncruces/go-sqlite3/vfs/ordmap"
+	"github.com/ncruces/go-sqlite3/vfs/ordmap"
 	"github.com/stretchr/testify/require"
 )
 
@@ -59,6 +59,7 @@ func BenchmarkInsert(b *testing.B) {
 				require.NoError(b, err)
 				defer stmt.Close() // Close the prepared statement
 
+				b.ReportAllocs()
 				for b.Loop() {
 					tx, err := db.Begin()
 					require.NoError(b, err)
@@ -88,6 +89,7 @@ func BenchmarkQuery(b *testing.B) {
 				require.NoError(b, err)
 				defer stmt.Close()
 
+				b.ReportAllocs()
 				for b.Loop() {
 					rows, err := stmt.Query()
 					require.NoError(b, err)
@@ -109,5 +111,28 @@ func BenchmarkQuery(b *testing.B) {
 				}
 			})
 		}
+	}
+}
+
+func BenchmarkFork(b *testing.B) {
+	db, err := sql.Open("sqlite3", "file:/base.db?vfs=ordmap")
+	require.NoError(b, err)
+	defer db.Close()
+	setupDb(b, db, 1000)
+
+	names := make([]string, b.N)
+	for i := 0; i < b.N; i++ {
+		names[i] = fmt.Sprintf("forked_%d.db", i)
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for _, name := range names {
+		ordmap.Fork("base.db", name)
+	}
+	b.StopTimer()
+
+	for _, name := range names {
+		ordmap.Delete(name)
 	}
 }
